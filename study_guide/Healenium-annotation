@@ -1,0 +1,356 @@
+# Healenium Annotations – Detailed Study Notes
+
+Java | Selenium WebDriver | TestNG | Page Object Model (POM)
+
+## 1. Introduction
+
+Healenium is an open-source, self-healing automation library that integrates with Selenium WebDriver to reduce test failures caused by changes in UI element locators.
+
+In traditional Selenium automation, if an element's ID, XPath, or CSS selector changes, the test may fail with a `NoSuchElementException`.
+
+Healenium attempts to identify an alternative locator using previously captured element information and similarity-based matching.
+
+Healenium annotations are used to control or enhance certain element-identification and self-healing behaviors. However, not all annotations used in a Healenium framework belong to Healenium itself.
+
+### Annotation categories
+
+| Category             | Examples                                          |
+| -------------------- | ------------------------------------------------- |
+| Healenium-specific   | `@DisableHealing`, `@PageAwareFindBy`             |
+| Selenium PageFactory | `@FindBy`, `@FindBys`, `@FindAll`, `@CacheLookup` |
+| TestNG lifecycle     | `@Test`, `@BeforeMethod`, `@AfterMethod`          |
+| Reporting (Allure)   | `@Step`, `@Description`, `@Severity`              |
+
+The following notes focus on the Healenium-specific annotations and their practical use in automation testing.
+
+## 2. `@DisableHealing`
+
+### Definition
+
+`@DisableHealing` is a Healenium annotation used to temporarily disable the self-healing mechanism for an annotated method.
+
+This is useful when the test must validate the actual existence or absence of an element without Healenium substituting a similar element.
+
+### Why is it required?
+
+Consider a login page where the application originally contains:
+
+```
+<button id="loginButton">Login</button>
+```
+
+After a UI change, the original element is removed and another button is introduced:
+
+```
+<button id="submitButton">Submit</button>
+```
+
+Under suitable conditions, Healenium may identify the new button as a replacement for the old one.
+
+However, when testing whether the original login button has been removed, automatic healing could produce a misleading result.
+
+Using `@DisableHealing` allows you to test the absence of the original locator without automatic recovery.
+
+### Java example
+
+```
+import com.epam.healenium.annotation.DisableHealing;
+import org.openqa.selenium.By;
+import org.openqa.selenium.NoSuchElementException;
+
+public class LoginPage {
+
+    @DisableHealing
+    public boolean isOldLoginButtonPresent() {
+        try {
+            return driver.findElement(
+                By.id("loginButton")
+            ).isDisplayed();
+        } catch (NoSuchElementException e) {
+            return false;
+        }
+    }
+}
+```
+
+### Key characteristics
+
+- Disables healing for supported annotated method executions.
+- Useful for negative testing and UI removal validation.
+- Does not permanently disable healing for the entire framework.
+- Requires a compatible Healenium-Web version and invocation setup.
+- Does not prevent Selenium exceptions unrelated to locator healing.
+
+### Practical testing scenarios
+
+| Scenario                    | Why disable healing?                           |
+| --------------------------- | ---------------------------------------------- |
+| Verify removed UI elements  | Ensure an obsolete element is genuinely absent |
+| Negative login testing      | Avoid substituting an unintended element       |
+| Validate deprecated buttons | Confirm old functionality is removed           |
+| Validate locator changes    | Observe the original locator failure           |
+| Debug self-healing          | Compare behavior with and without healing      |
+
+Important: If your test specifically needs to verify that a locator is broken, disabling healing is appropriate. If the objective is to validate that the application workflow survives a locator change, leave healing enabled.
+
+## 3. `@PageAwareFindBy`
+
+### Definition
+
+`@PageAwareFindBy` is a Healenium annotation that extends Selenium's `@FindBy` functionality by associating a locator with a specific page.
+
+It helps Healenium distinguish between similar locators appearing on different pages or application states.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://deepwiki.com\&sz=32)
+
+DeepWiki+1
+
+
+
+### Syntax
+
+```
+@PageAwareFindBy(
+    page = "LoginPage",
+    findBy = @FindBy(id = "username")
+)
+private WebElement usernameField;
+```
+
+### Parameters
+
+| Parameter | Description                                     |
+| --------- | ----------------------------------------------- |
+| `page`    | Logical name of the page containing the element |
+| `findBy`  | Selenium `@FindBy` locator definition           |
+
+If `page` is omitted, the declaring class name is used as the default page context.
+
+### Example: Kiosk Labour Login
+
+```
+import com.epam.healenium.annotation.PageAwareFindBy;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.FindBy;
+import org.openqa.selenium.support.PageFactory;
+
+public class KioskLabourLoginPage {
+
+    @PageAwareFindBy(
+        page = "KioskLabourLogin",
+        findBy = @FindBy(id = "mobileNumber")
+    )
+    private WebElement mobileNumber;
+
+    @PageAwareFindBy(
+        page = "KioskLabourLogin",
+        findBy = @FindBy(id = "sendOTP")
+    )
+    private WebElement sendOTP;
+
+    public KioskLabourLoginPage(
+            WebDriver driver) {
+        PageFactory.initElements(driver, this);
+    }
+
+    public void enterMobileNumber(String number) {
+        mobileNumber.sendKeys(number);
+    }
+
+    public void clickSendOTP() {
+        sendOTP.click();
+    }
+}
+```
+
+The IDs in this example are illustrative and must be replaced with actual application locators.
+
+### How it works
+
+`@PageAwareFindBy`
+
+Defines locator and page context
+
+PageFactory initialization
+
+Processes annotated element fields
+
+Page-aware locator
+
+Associates the element with a logical page
+
+Healenium locator recovery
+
+Uses the context when identifying possible replacement elements
+
+### When to use it
+
+- Applications with multiple pages containing similar buttons.
+- Kiosk applications where the same field IDs appear across modules.
+- Large Page Object Model frameworks.
+- Applications with reusable UI components.
+- Situations where healing must distinguish between similar elements.
+
+## 4. Difference between `@FindBy` and `@PageAwareFindBy`
+
+| Feature                              | `@FindBy` | `@PageAwareFindBy`            |
+| ------------------------------------ | --------- | ----------------------------- |
+| Library                              | Selenium  | Healenium                     |
+| Identifies elements                  | Yes       | Yes                           |
+| Supports XPath, ID, CSS              | Yes       | Yes, through nested `@FindBy` |
+| Adds page context                    | No        | Yes                           |
+| Compatible with POM                  | Yes       | Yes                           |
+| Supports self-healing with Healenium | Yes       | Yes                           |
+| Requires page name                   | No        | Optional                      |
+
+Important: You do not need to replace all existing `@FindBy` annotations with `@PageAwareFindBy`. Standard Selenium locators already work with Healenium-Web when properly configured.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://github.com\&sz=32)
+
+GitHub
+
+
+
+## 5. `PageAwareBy` – Related Class (Not an Annotation)
+
+`PageAwareBy` is a Healenium locator class that provides similar page-awareness without requiring PageFactory annotations.
+
+### Example
+
+```
+import com.epam.healenium.PageAwareBy;
+
+By loginButton = PageAwareBy.by(
+    "KioskLabourLogin",
+    By.id("loginButton")
+);
+
+driver.findElement(loginButton).click();
+```
+
+### Difference
+
+| `@PageAwareFindBy`            | `PageAwareBy`                      |
+| ----------------------------- | ---------------------------------- |
+| Annotation                    | Java class                         |
+| Used with PageFactory         | Used with `driver.findElement()`   |
+| Declared on WebElement fields | Created programmatically           |
+| Useful in POM                 | Useful in dynamic locator handling |
+
+## 6. Healenium configuration vs annotations
+
+Some commonly discussed Healenium features are configuration properties, not annotations.
+
+Example `src/test/resources/healenium.properties`:
+
+```
+heal-enabled = true
+recovery-tries = 1
+score-cap = 0.5
+
+hlm.server.url = http://localhost:7878
+hlm.imitator.url = http://localhost:8000
+```
+
+| Property           | Function                                             |
+| ------------------ | ---------------------------------------------------- |
+| `heal-enabled`     | Enables or disables self-healing globally            |
+| `recovery-tries`   | Controls the number of recovery candidates attempted |
+| `score-cap`        | Sets the minimum similarity score                    |
+| `hlm.server.url`   | Healenium backend address                            |
+| `hlm.imitator.url` | Selector imitator service address                    |
+
+These are documented in the official Healenium-Web setup guide.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://github.com\&sz=32)
+
+GitHub
+
+
+
+## 7. Practical annotation usage in an SDET framework
+
+For a framework using Java, Selenium, TestNG, Healenium, Allure, and Log4j2, the following division is recommended:
+
+| Requirement                                | Recommended feature    |
+| ------------------------------------------ | ---------------------- |
+| Ordinary element identification            | `@FindBy`              |
+| Page-specific locator identification       | `@PageAwareFindBy`     |
+| Disable healing during negative validation | `@DisableHealing`      |
+| Dynamic page-aware locators                | `PageAwareBy`          |
+| Test execution                             | TestNG `@Test`         |
+| Test initialization                        | TestNG `@BeforeMethod` |
+| Test cleanup                               | TestNG `@AfterMethod`  |
+| Allure step reporting                      | Allure `@Step`         |
+
+### Important implementation considerations
+
+1. Healenium-Web vs Healenium-Proxy: The annotations discussed here belong to Healenium-Web. There are reported compatibility limitations for `@DisableHealing` in Healenium-Proxy.&#x20;
+
+   [image](https://www.google.com/s2/favicons?domain=https://github.com\&sz=32)
+
+   GitHub
+
+2. Healing does not guarantee correctness: A healed locator must still identify the intended business element.
+
+3. Baseline execution is necessary: Healenium typically needs information from successful element identification before it can recover a changed locator.
+
+4. Validate annotation behavior: Confirm that your specific Healenium version and framework setup process annotations correctly, especially for inherited methods and PageFactory elements.
+
+5. Avoid unnecessary healing: Negative scenarios should use deliberate validation strategies to prevent false positives.
+
+## 8. Interview questions and answers
+
+Q1. What are the main Healenium-specific annotations?
+
+`@DisableHealing` and `@PageAwareFindBy`.
+
+Q2. What is the purpose of `@DisableHealing`?
+
+It is used to prevent self-healing during selected element operations, particularly when verifying that an element is absent.
+
+Q3. What is the difference between `@FindBy` and `@PageAwareFindBy`?
+
+`@FindBy` identifies Selenium elements, whereas `@PageAwareFindBy` additionally provides logical page context for Healenium.
+
+Q4. Is `@PageAwareFindBy` mandatory for self-healing?
+
+No. Modern Healenium-Web versions support ordinary Selenium `By` locators and `@FindBy`.
+
+Q5. Is `PageAwareBy` an annotation?
+
+No. It is a class used to construct page-aware Selenium locators.
+
+Q6. Does `@DisableHealing` disable healing across the entire suite?
+
+No. It is intended for selective disabling. Use the `heal-enabled` configuration property to disable healing globally.
+
+Q7. Can Healenium annotations be combined with TestNG?
+
+Yes. TestNG handles test execution and lifecycle management, while Healenium provides locator-healing functionality.
+
+## 9. Quick revision notes
+
+`@DisableHealing`
+
+Disable automatic locator recovery for supported operations.
+
+`@PageAwareFindBy`
+
+Associate PageFactory elements with a logical page.
+
+`PageAwareBy`
+
+Create contextual locators programmatically. It is not an annotation.
+
+`heal-enabled`
+
+Globally control healing through configuration. It is not an annotation.
+
+### References for further study
+
+- [Official Healenium-Web repository](https://github.com/healenium/healenium-web?utm_source=chatgpt.com)
+- [Healenium Maven example project](https://github.com/healenium/healenium-example-maven?utm_source=chatgpt.com)
+- [Healenium advanced features and annotation implementation](https://deepwiki.com/healenium/healenium-web/7-advanced-features?utm_source=chatgpt.com)
+
+For your existing automation framework, I recommend first mastering `@DisableHealing`, `@PageAwareFindBy`, and `PageAwareBy`, followed by testing their behavior with intentionally modified locators in your Kiosk Labour Login and Feedback & Grievance modules.
